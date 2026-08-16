@@ -53,3 +53,26 @@
       }
       return dispatched;
   }
+  
+  template <typename Handler>
+  std::size_t parse_partial(std::span<const std::byte> buf, Handler& h) {
+      std::size_t offset = 0;
+
+      while (offset + 2 <= buf.size()) {                 // need 2 bytes for length
+          const uint16_t len = load_be16(buf.data() + offset);
+          if (len == 0) break;                           // padding / end
+          if (offset + 2 + len > buf.size()) break;      // incomplete msg -> carry over
+
+          const std::byte* payload = buf.data() + offset + 2;
+          const char type = static_cast<char>(payload[0]);
+
+          switch (type) {
+              case 'A': h.on_add(*reinterpret_cast<const AddOrderMessage*>(payload)); break;
+              case 'E': h.on_executed(*reinterpret_cast<const OrderExecutedMessage*>(payload)); break;
+              case 'D': h.on_delete(*reinterpret_cast<const OrderDeleteMessage*>(payload)); break;
+              default: break;
+          }
+          offset += 2 + len;                             // advance past this record
+      }
+      return offset;                                     // bytes fully consumed
+  }
